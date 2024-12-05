@@ -1,7 +1,7 @@
-def setup():
-    print("setup")
+from . import main
 
+def init():
+    print("Initializing Reibun Koubou...")
+    main.init()
 
-
-# dev: https://forums.ankiweb.net/t/pycharm-setup-for-add-on-debugging/17733
-setup()
+init()
