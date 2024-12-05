@@ -4,7 +4,9 @@ __pycache__/
 .env
 venv/
 .idea
+.idea/*
+ref/
 *.iml
 
-
+# Utility dev script for testing.
 runanki.py

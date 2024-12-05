@@ -1,33 +1,67 @@
-from typing import Callable, List, Sequence
-from aqt import QAction, QMenu, browser, editor, gui_hooks, mw
+from typing import Union
+from aqt import QAction, QMenu, editor, gui_hooks
+
+from anki.notes import Note
+
+from .reibun import ReibunGenerator
+from .handler import ReibunHookHandler
 
 
 def setup_hooks():
-    gui_hooks.editor_did_init_buttons.append(add_editor_top_button)
+    # To implement later.
+    # gui_hooks.editor_did_init_buttons.append(add_editor_top_button)
+    handler = ReibunHookHandler()
+    gui_hooks.editor_will_show_context_menu.append(handler.on_editor_context_menu)
 
 
-def add_editor_top_button(buttons: List[str], e: editor.Editor):
-    button = e.addButton(
-        cmd="Generate Reibun",
-        label="✨",
-        func=generate_reibun,
-        icon=None,
-        tip="Ctrl+Shift+G: Generate Smart Fields",
-        id="generate_smart_fields",
-        keys="Ctrl+Shift+G",
+def get_note_type(note: Note) -> str:
+    note_info = note.note_type()
+    if not note_info:
+        raise RuntimeError("Note type not found")
+    return note_info["name"]
+
+
+def get_fields_from_current_note(note) -> list[tuple[str, str]]:
+    return note.items()
+
+
+def get_field_from_index(note: Note, index: int) -> Union[str, None]:
+    """Gets the field name from the index of a note."""
+    fields = get_fields_from_current_note(note)
+    if index < 0 or index >= len(fields):
+        return None
+    return fields[index]
+
+
+def on_editor_context_menu(editor_web_view: editor.EditorWebView, menu: QMenu):
+    generate_field_item = QAction("📝 Generate Smart Reibun", menu)
+
+    editor = editor_web_view.editor
+    card = editor.card
+    note = editor.note
+    if note is None:
+        return
+
+    current_field_index = editor.currentField
+    if current_field_index is None:
+        return
+
+    generate_field_item.triggered.connect(
+        lambda: generate_reibun(card, note, current_field_index)
     )
-    buttons.append(button)
 
-def generate_reibun(e: editor.Editor):
-    card = e.card
-    note = e.note
+    menu.addAction(generate_field_item)
+    menu.addSeparator()
 
+
+def generate_reibun(card, note, target_field_index):
     if card is None:
         card = note.ephemeral_card()
 
-    print(card)
-    print(note)
-
-
-# dev: https://forums.ankiweb.net/t/pycharm-setup-for-add-on-debugging/17733
-# ref: https://github.com/piazzatron/anki-smart-notes/blob/a80b1b16aeb0fd1321186b207e3167cad3c3f4c7/src/hooks.py#L277
+    generator = ReibunGenerator()
+    generator.generate_reibun(
+        reibun_source_phrase,
+        context_for_reibun,
+        on_success_callback,
+        target_field=target_field,
+    )
