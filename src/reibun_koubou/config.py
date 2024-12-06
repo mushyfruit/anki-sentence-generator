@@ -22,3 +22,8 @@ class Config:
     @property
     def debug_mode(self) -> bool:
         return os.getenv("DEBUG_MODE", "false").lower() == "true"
+
+
+class CardConfig:
+    def __init__(self):
+        self.config_key = "reibun-koubou-card-settings"

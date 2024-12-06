@@ -1,10 +1,14 @@
 import re
+import logging
 
 from .reibun import ReibunGenerator
 from .config import Config
 
 from aqt import QAction, QMenu, editor, mw
+from aqt.utils import showWarning
 from anki.notes import Note
+
+log = logging.getLogger(__name__)
 
 
 class ReibunHookHandler:
@@ -15,16 +19,28 @@ class ReibunHookHandler:
     def on_editor_context_menu(
         self, editor_web_view: editor.EditorWebView, menu: QMenu
     ):
-        editor = editor_web_view.editor
-        if not editor or not editor.note:
-            return
+        """Called before the context menu is shown from the editor window.
 
-        generate_field_item = QAction("📝 Generate Smart Reibun", menu)
-        generate_field_item.triggered.connect(
-            lambda: self.handle_current_field_generation(editor)
-        )
-        menu.addAction(generate_field_item)
-        menu.addSeparator()
+        Handles adding the "Generate Smart Reibun" menu item to the context menu.
+
+        :param editor_web_view:
+        :param menu: QMenu instance.
+        """
+        try:
+            editor_instance = editor_web_view.editor
+            if not editor_instance or not editor_instance.note:
+                log.error("No valid editor instance was found. Skipping menu creation.")
+                return
+
+            generate_field_item = QAction("📝 Generate Smart Reibun", menu)
+            generate_field_item.triggered.connect(
+                lambda: self.handle_current_field_generation(editor_instance)
+            )
+            menu.addAction(generate_field_item)
+            menu.addSeparator()
+        except Exception as e:
+            log.exception(e)
+            showWarning(f"Failed to generate Smart Reibun menu: {e}")
 
     def handle_current_field_generation(self, editor: editor.Editor):
         note = editor.note
