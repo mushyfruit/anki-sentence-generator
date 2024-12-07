@@ -3,6 +3,7 @@ import tiktoken
 
 import json
 
+
 class TokenCostEstimator:
     def __init__(self):
         # Initialize tokenizer for counting

@@ -1,31 +1,41 @@
-from typing import List, Dict, Union
+from typing import Dict
 
 import json
+import logging
 from textwrap import dedent
 
-from .config import Config
-from .estimate import TokenCostEstimator
+from .config import AnkiConfig
+from src.dev.estimate import TokenCostEstimator
 
 from anthropic import Anthropic
 
 
 MODEL = "claude-3-haiku-20240307"
 
+log = logging.getLogger(__name__)
+
 
 class ReibunGenerator(object):
     def __init__(self):
-        self.config = Config()
+        self.config = AnkiConfig()
         self.client = Anthropic(api_key=self.config.claude_api_key)
 
     def update_note_field(
-        self, note, target_phrase, target_field, context=None, on_success_callback=None
+        self,
+        note,
+        target_phrase,
+        field_mappings,
+        context=None,
+        on_success_callback=None,
     ):
         response = self.generate_reibun(target_phrase, context=context)
         if not response:
-            print("Failed when attempting to generate reibun.")
+            log.error("Failed when attempting to generate reibun.")
             return False
 
-        note[target_field] = response["sentence"]
+        for response_field, target_field in field_mappings.items():
+            note[target_field] = response[response_field]
+
         if on_success_callback:
             on_success_callback(note)
 
@@ -36,7 +46,7 @@ class ReibunGenerator(object):
             context = {}
 
         prompt = self._build_prompt(target_phrase, context)
-        print(estimate_reibun_cost(target_phrase))
+        log.debug(estimate_reibun_cost(target_phrase))
 
         try:
             if self.config.debug_mode:

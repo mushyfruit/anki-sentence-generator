@@ -10,3 +10,6 @@ ref/
 
 # Utility dev script for testing.
 runanki.py
+
+# Ignore user-level config files.
+meta.json
