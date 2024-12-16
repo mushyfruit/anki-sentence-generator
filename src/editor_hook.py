@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import logging
 from dataclasses import dataclass
@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from .reibun import ReibunGenerator
 from .config import AnkiConfig
 from .utils import get_note_type, get_current_field_name, strip_html_tags
+from .constants import ConfigKeys
 from .ui.field_dialog import FieldMappingDialog
 
-from aqt import QAction, QMenu, editor
+from aqt import QAction, QMenu, editor, QLabel, QWidgetAction, QComboBox, QWidget, QHBoxLayout
 from aqt.utils import showWarning
 from anki.notes import Note
 
@@ -23,6 +24,8 @@ class ReibunContext:
     note_type: str
     target_field_name: str
     target_field_value: str
+    difficulty: int
+    context_type: str
 
 
 class ReibunEditorHook:
@@ -61,13 +64,35 @@ class ReibunEditorHook:
                 lambda: self.configure_field_mapping(editor_instance)
             )
 
+            context_options = getattr(self.config, ConfigKeys.CONTEXT_OPTIONS)
+            difficulty_levels = getattr(self.config, ConfigKeys.DIFFICULTY_OPTIONS)
+
+            context_action = self._add_combobox("Context:", context_options, menu)
+            difficulty_action = self._add_combobox("Difficulty:", difficulty_levels, menu)
+
+            menu.addSeparator()
             menu.addAction(generate_field_item)
             menu.addAction(configure_fields_item)
+            menu.addAction(context_action)
+            menu.addAction(difficulty_action)
             menu.addSeparator()
 
         except Exception as e:
             log.exception("Failed to generate Smart Reibun menu: %s", e)
             showWarning(f"Failed to generate Smart Reibun menu: {str(e)}")
+
+    def _add_combobox(self, label: str, items: List[str], menu: QMenu) -> QAction:
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(20, 2, 8, 2)
+        label = QLabel(label)
+        combo = QComboBox()
+        combo.addItems(items)
+        layout.addWidget(label)
+        layout.addWidget(combo)
+        context_action = QWidgetAction(menu)
+        context_action.setDefaultWidget(widget)
+        return context_action
 
     def configure_field_mapping(
         self, editor: editor.Editor, target_field_name: Optional[str] = None
@@ -86,6 +111,7 @@ class ReibunEditorHook:
         note_type_config = self.config.get_note_type_config(note_type)
 
         # Launch the Field Mapping Dialog to associate LLM outputs -> note fields.
+        print(note_type_config)
         dialog = FieldMappingDialog(
             note,
             target_field_name=target_field_name,
@@ -95,10 +121,10 @@ class ReibunEditorHook:
 
         if dialog.exec():
             # Retrieve the field mappings as set by the user.
-            updated_field_mappings = dialog.get_field_mappings()
+            updated_note_type_config = dialog.get_note_config()
 
             # Store these mappings per note in the addon config.
-            self.config.set_note_type_config(note_type, updated_field_mappings)
+            self.config.set_note_type_config(note_type, updated_note_type_config)
 
             log.debug("Field mapping configuration saved for {0}!".format(note_type))
             return True
@@ -143,6 +169,8 @@ class ReibunEditorHook:
             note_type=get_note_type(note),
             target_field_name=target_field_name,
             target_field_value=strip_html_tags(note[target_field_name]),
+            difficulty=None,
+            context_type=None,
         )
 
     def _get_or_create_field_mappings(

@@ -33,7 +33,9 @@ class ReibunGenerator(object):
             log.error("Failed when attempting to generate reibun.")
             return False
 
-        for response_field, target_field in field_mappings.items():
+        print(field_mappings)
+
+        for response_field, target_field in field_mappings.get("field_mapping", {}).items():
             note[target_field] = response[response_field]
 
         if on_success_callback:

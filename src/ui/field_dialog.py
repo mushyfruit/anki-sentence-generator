@@ -1,12 +1,17 @@
-from aqt.qt import QDialog, QVBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, Qt
+from aqt.qt import (QDialog, QVBoxLayout, QGridLayout,
+                    QLabel, QComboBox, QPushButton, Qt,
+                    QHBoxLayout, QFrame)
 
 from anki.notes import Note
+
+from ..constants import NoteConfig
+
 from ..utils import get_field_names_from_note, get_note_type
 
 
 class FieldMappingDialog(QDialog):
     def __init__(
-        self, note: Note, target_field_name=None, existing_config=None, parent=None
+            self, note: Note, target_field_name=None, existing_config=None, parent=None
     ):
         super().__init__(parent)
         self._note = note
@@ -17,6 +22,7 @@ class FieldMappingDialog(QDialog):
         self._field_mappings = {}
 
         self.setup_ui()
+        self._populate_existing_settings()
 
     def setup_ui(self):
         self.setMinimumWidth(300)
@@ -38,28 +44,62 @@ class FieldMappingDialog(QDialog):
             grid.addWidget(label, i, 0)
             grid.addWidget(combo, i, 1)
 
-        if self._existing_config:
-            for response_field, target_field in self._existing_config.items():
-                print(response_field, target_field)
-                self.set_combobox_item(response_field, target_field)
+        layout.addLayout(grid)
+
+        settings_layout = QHBoxLayout()
+
+        context_label = QLabel("Context:")
+        self._context_combo = QComboBox()
+
+        difficulty_label = QLabel("Difficulty:")
+        self._difficulty_combo = QComboBox()
+
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(separator)
+
+        settings_layout.addStretch()
+        settings_layout.addWidget(context_label)
+        settings_layout.addWidget(self._context_combo)
+        settings_layout.addSpacing(10)
+        settings_layout.addWidget(difficulty_label)
+        settings_layout.addWidget(self._difficulty_combo)
+        settings_layout.addStretch()
+
+        save_button = QPushButton("Save Configuration")
+        save_button.clicked.connect(self.save_mapping)
+        layout.addLayout(settings_layout)
+        layout.addWidget(save_button)
+
+        self.setLayout(layout)
+
+    def _populate_existing_settings(self) -> None:
+        field_mappings = self._existing_config.get(NoteConfig.FIELDS, {})
+
+        for response_field, target_field in field_mappings.items():
+            self.set_combobox_item(response_field, target_field)
 
         if self._target_field_name:
             self.set_combobox_item("Sentence", self._target_field_name)
 
-        layout.addLayout(grid)
+        difficulty = self._existing_config.get(NoteConfig.DIFFICULTY, None)
+        if difficulty:
+            self._set_combobox_value(self._difficulty_combo, difficulty)
 
-        save_button = QPushButton("Save Configuration")
-        save_button.clicked.connect(self.save_mapping)
-        layout.addWidget(save_button)
-
-        self.setLayout(layout)
+        context = self._existing_config.get(NoteConfig.CONTEXT, None)
+        if context:
+            self._set_combobox_value(self._context_combo, context)
 
     def set_combobox_item(self, combo_name, item_name):
         combo_box = self._combos.get(combo_name.lower())
         if combo_box is None:
             return
 
-        index = combo_box.findText(item_name, Qt.MatchFlag.MatchExactly)
+        self._set_combobox_value(combo_box, item_name)
+
+    def _set_combobox_value(self, combo_box, value):
+        index = combo_box.findText(value, Qt.MatchFlag.MatchExactly)
 
         if index >= 0:
             combo_box.setCurrentIndex(index)
@@ -70,8 +110,8 @@ class FieldMappingDialog(QDialog):
 
         for field_type, combo in self._combos.items():
             if (
-                field_type.lower() != current_field.lower()
-                and combo.currentText() == selected_value
+                    field_type.lower() != current_field.lower()
+                    and combo.currentText() == selected_value
             ):
                 combo.setCurrentText("None")
 
@@ -81,6 +121,19 @@ class FieldMappingDialog(QDialog):
             if selected != "None":
                 self._field_mappings[field_type.lower()] = selected
         self.accept()
+
+    def get_note_config(self):
+        return {
+            NoteConfig.FIELDS: self._field_mappings,
+            NoteConfig.DIFFICULTY: self._get_difficulty(),
+            NoteConfig.CONTEXT: self._get_context(),
+        }
+
+    def _get_context(self):
+        return self._context_combo.currentText()
+
+    def _get_difficulty(self):
+        return self._difficulty_combo.currentText()
 
     def get_field_mappings(self):
         return self._field_mappings

@@ -1,3 +1,7 @@
 {
-  "reibun_fields": {}
+  "reibun_fields": {},
+  "difficulty_options": ["N1", "N2", "N3", "N4", "N5"],
+  "default_difficulty": "N1",
+  "context_options": ["None", "Casual", "Formal", "Business", "Academic"],
+  "default_context": "None"
 }
