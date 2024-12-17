@@ -4,6 +4,23 @@ import re
 
 from aqt import mw, editor
 from anki.notes import Note
+from aqt.operations import QueryOp
+
+
+def execute_in_background_thread(
+    func, on_success=None, on_failure=None, with_progress=False
+):
+    assert mw is not None
+
+    query_op = QueryOp(parent=mw, op=lambda _: func(), success=on_success)
+
+    if on_failure is not None:
+        query_op.failure(on_failure)
+
+    if with_progress:
+        query_op = query_op.with_progress()
+
+    query_op.run_in_background()
 
 
 def get_note_type(note: Note) -> str:

@@ -15,8 +15,10 @@
   - User can define the fields to return in the dialog.
   - Probably won't be necessary.
     - Start with Reibun, Translation, Additional Context
-  - Pivot to a YAML based template system for prompting.
+- [x] Pivot to a YAML based template system for prompting.
 
 - [ ] Settings Menu?
   - Target JLPT level for auto-generation.
   - Refine the existing structure.
+
+- [x] Use QueryOp for sentence generation

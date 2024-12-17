@@ -2,19 +2,29 @@ from typing import Dict
 
 import json
 import logging
-from textwrap import dedent
 
-from src.dev.estimate import TokenCostEstimator
+from .dev.estimate import TokenCostEstimator
 
 from anthropic import Anthropic
 
 from .prompts.manager import PromptManager
-from .constants import NoteConfig
+from .constants import NoteConfig, ResponseFields
 
 
 MODEL = "claude-3-haiku-20240307"
-
 log = logging.getLogger(__name__)
+
+
+class ReibunGenerationError(Exception):
+    """Base exception for reibun generation errors."""
+
+    pass
+
+
+class ParsingError(ReibunGenerationError):
+    """Raised when response parsing fails."""
+
+    pass
 
 
 class ReibunGenerator(object):
@@ -31,28 +41,31 @@ class ReibunGenerator(object):
         field_mappings,
         difficulty=None,
         generation_context=None,
-        on_success_callback=None,
     ):
-        response = self.generate_reibun(target_phrase, difficulty, generation_context)
-        if not response:
-            log.error("Failed when attempting to generate reibun.")
-            return False
+        try:
+            response = self._generate_reibun(
+                target_phrase, difficulty=difficulty, context=generation_context
+            )
 
-        for response_field, target_field in field_mappings.get(
-            NoteConfig.FIELDS, {}
-        ).items():
-            note[target_field] = response[response_field]
+            if not response:
+                log.error("Failed when attempting to generate reibun.")
+                return False
 
-        if on_success_callback:
-            on_success_callback(note)
+            for response_field, target_field in field_mappings.get(
+                NoteConfig.FIELDS, {}
+            ).items():
+                note[target_field] = response[response_field]
+
+        except Exception as e:
+            log.error(f"Failed to update note: {e}")
+            raise ReibunGenerationError(f"Failed to update note: {e}") from e
 
         return True
 
-    def generate_reibun(self, target_phrase, difficulty=None, context=None):
+    def _generate_reibun(self, target_phrase, difficulty=None, context=None):
         full_prompt = self._prompt_manager.build_reibun_prompt(
             target_phrase, difficulty=difficulty, context=context
         )
-        log.info(estimate_reibun_cost(full_prompt))
 
         try:
             if self.config.debug_mode:
@@ -67,7 +80,12 @@ class ReibunGenerator(object):
                 response_content = response.content[0].text
 
             # Parse the response and extract relevant parts
-            return self._parse_response(response_content)
+            response_dict = self._parse_response(response_content)
+
+            # Validate the response dictionary to ensure all required fields are present.
+            self._validate_response(response_dict)
+
+            return response_dict
 
         except Exception as e:
             print(f"Error generating example: {e}")
@@ -76,47 +94,15 @@ class ReibunGenerator(object):
     def _parse_response(self, response: str) -> Dict[str, str]:
         """Parse Claude's response into field values"""
         try:
-            # Assuming response is in JSON format
             return json.loads(response)
-        except:
-            return {}
+        except json.decoder.JSONDecodeError as e:
+            log.error(f"Failed to parse response: {e}", exc_info=True)
+            raise ParsingError("Failed to parse LLM response") from e
 
-    def _build_prompt(self, word: str, context: dict) -> str:
-        return dedent(f"""Generate a natural Japanese example sentence.
-
-    Word Information:
-    - Word: {word}
-
-    Additional Context:
-    {self._format_additional_context(context)}
-
-    Generate a natural, everyday example sentence that demonstrates correct usage of this word or phrase.
-
-    Format your response as JSON with the following fields:
-    - sentence: The Japanese example sentence
-    - reading: Reading in hiragana
-    - translation: English translation
-    - notes: Any relevant usage notes or explanations
-
-    Important: Put <b>{word}</b> tags around the target word in both the sentence and reading.
-
-    The sentence should be:
-    - Natural, reflect real spoken/written Japanese, and be an ideal example sentence to learn from.
-    - Not too long, ensure it's ideal for learning via spaced-repetition.
-    - Appropriate for the word's level.
-    - Clear in demonstrating the word's meaning and nuance.
-    - Grammatically correct.
-    """)
-
-    def _format_additional_context(self, context: dict) -> str:
-        # Filter out invalid options
-        additional_context = {k: v for k, v in context.items() if v}
-        additional_context_str = ""
-
-        if NoteConfig.CONTEXT in additional_context:
-            additional_context_str += ""
-
-        return "\n".join(f"- {k}: {v}" for k, v in additional_context.items())
+    def _validate_response(self, response):
+        missing = ResponseFields.required_fields - set(response.keys())
+        if missing:
+            raise ParsingError(f"Missing required fields: {missing}")
 
 
 # Example usage with your Reibun generator

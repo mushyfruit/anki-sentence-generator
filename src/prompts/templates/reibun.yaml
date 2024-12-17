@@ -18,7 +18,7 @@ templates:
         "sentence": "Japanese example sentence with <b>target word</b>",
         "reading": "Reading in hiragana with <b>target word reading</b>",
         "translation": "English translation",
-        "notes": "Usage notes and explanations"
+        "notes": "Notes on nuance/tone of the word, differentiate it from other similar words, use-cases, etc. Should not include notes about the prompt!"
       }
 
   customizable:

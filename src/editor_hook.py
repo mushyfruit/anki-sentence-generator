@@ -5,7 +5,12 @@ from dataclasses import dataclass
 
 from .reibun import ReibunGenerator
 from .config import AnkiConfig
-from .utils import get_note_type, get_current_field_name, strip_html_tags
+from .utils import (
+    get_note_type,
+    get_current_field_name,
+    strip_html_tags,
+    execute_in_background_thread,
+)
 from .constants import ConfigKeys, NoteConfig
 from .ui.field_dialog import FieldMappingDialog
 
@@ -258,13 +263,16 @@ class ReibunEditorHook:
         :param editor: Editor instance.
         :param field_mappings: Mapping of generated field names to note fields.
         """
-        self.generator.update_note_field(
-            context.note,
-            context.target_field_value,
-            field_mappings,
-            difficulty=context.difficulty,
-            generation_context=context.context_type,
-            on_success_callback=lambda x: self.post_field_update(x, editor),
+        # Execute query to LLM in background thread via QueryOp.
+        execute_in_background_thread(
+            lambda: self.generator.update_note_field(
+                context.note,
+                context.target_field_value,
+                field_mappings,
+                difficulty=context.difficulty,
+                generation_context=context.context_type,
+            ),
+            lambda _: self.post_field_update(context.note, editor),
         )
 
     def post_field_update(self, note: Note, editor: editor.Editor) -> None:
@@ -273,6 +281,7 @@ class ReibunEditorHook:
         :param note: Note instance.
         :param editor: Editor instance.
         """
+        log.debug("Post-field update.")
         if note.id:
             note.load()
         editor.loadNote()
