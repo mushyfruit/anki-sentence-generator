@@ -46,7 +46,10 @@ class ReibunEditorHook:
     def __init__(self):
         self.config = AnkiConfig()
         self.generator = ReibunGenerator(self.config)
+
+        # Store current note state
         self._current_note_type = None
+        self._current_field_name = None
 
     def on_editor_context_menu(
         self, editor_web_view: editor.EditorWebView, menu: QMenu
@@ -109,6 +112,9 @@ class ReibunEditorHook:
         except Exception as e:
             log.exception("Failed to generate Smart Reibun menu: %s", e)
             showWarning(f"Failed to generate Smart Reibun menu: {str(e)}")
+
+    def get_current_field(self):
+        return self._current_field_name
 
     def _add_combobox(
         self, label: str, items: List[str], value: str, config_key: str, parent: QMenu
@@ -182,15 +188,22 @@ class ReibunEditorHook:
 
         :param editor: Editor instance.
         """
-        context = self._prepare_reibun_context(editor)
-        if context is None:
+        note_type = get_note_type(editor.note)
+        self._current_field_name = get_current_field_name(editor.note, editor)
+        if self._current_field_name is None:
+            log.error("Unable to retrieve target field name.")
             return
 
         # Try to get existing config or configure a new one.
         field_mappings = self._get_or_create_field_mappings(
-            editor, context.note_type, context.target_field_name
+            editor, note_type, self._current_field_name
         )
         if not field_mappings:
+            return
+
+        context = self._prepare_reibun_context(editor)
+        if context is None:
+            log.error("Unable to create valid reibun context.")
             return
 
         self._generate_field_content(context, editor, field_mappings)
@@ -201,12 +214,8 @@ class ReibunEditorHook:
             log.error("Invalid note was provided. Unable to generate field.")
             return None
 
-        target_field_name = get_current_field_name(note, editor)
-        if target_field_name is None:
-            log.debug("No field name found")
-            return
-
         note_type = get_note_type(note)
+        target_field_name = self.get_current_field()
         existing_config = self.config.get_note_type_config(note_type)
         difficulty = existing_config.get(NoteConfig.DIFFICULTY, None)
         context_type = existing_config.get(NoteConfig.CONTEXT, None)
