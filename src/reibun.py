@@ -4,10 +4,12 @@ import json
 import logging
 from textwrap import dedent
 
-from .config import AnkiConfig
 from src.dev.estimate import TokenCostEstimator
 
 from anthropic import Anthropic
+
+from .prompts.manager import PromptManager
+from .constants import NoteConfig
 
 
 MODEL = "claude-3-haiku-20240307"
@@ -16,8 +18,10 @@ log = logging.getLogger(__name__)
 
 
 class ReibunGenerator(object):
-    def __init__(self):
-        self.config = AnkiConfig()
+    def __init__(self, config):
+        self.config = config
+
+        self._prompt_manager = PromptManager(config)
         self.client = Anthropic(api_key=self.config.claude_api_key)
 
     def update_note_field(
@@ -25,17 +29,18 @@ class ReibunGenerator(object):
         note,
         target_phrase,
         field_mappings,
-        context=None,
+        difficulty=None,
+        generation_context=None,
         on_success_callback=None,
     ):
-        response = self.generate_reibun(target_phrase, context=context)
+        response = self.generate_reibun(target_phrase, difficulty, generation_context)
         if not response:
             log.error("Failed when attempting to generate reibun.")
             return False
 
-        print(field_mappings)
-
-        for response_field, target_field in field_mappings.get("field_mapping", {}).items():
+        for response_field, target_field in field_mappings.get(
+            NoteConfig.FIELDS, {}
+        ).items():
             note[target_field] = response[response_field]
 
         if on_success_callback:
@@ -43,12 +48,11 @@ class ReibunGenerator(object):
 
         return True
 
-    def generate_reibun(self, target_phrase, context=None):
-        if context is None:
-            context = {}
-
-        prompt = self._build_prompt(target_phrase, context)
-        log.debug(estimate_reibun_cost(target_phrase))
+    def generate_reibun(self, target_phrase, difficulty=None, context=None):
+        full_prompt = self._prompt_manager.build_reibun_prompt(
+            target_phrase, difficulty=difficulty, context=context
+        )
+        log.info(estimate_reibun_cost(full_prompt))
 
         try:
             if self.config.debug_mode:
@@ -58,7 +62,7 @@ class ReibunGenerator(object):
                     model=MODEL,
                     max_tokens=300,
                     temperature=0.7,
-                    messages=[{"role": "user", "content": prompt.strip()}],
+                    messages=[{"role": "user", "content": full_prompt.strip()}],
                 )
                 response_content = response.content[0].text
 
@@ -105,24 +109,19 @@ class ReibunGenerator(object):
     """)
 
     def _format_additional_context(self, context: dict) -> str:
+        # Filter out invalid options
         additional_context = {k: v for k, v in context.items() if v}
+        additional_context_str = ""
+
+        if NoteConfig.CONTEXT in additional_context:
+            additional_context_str += ""
+
         return "\n".join(f"- {k}: {v}" for k, v in additional_context.items())
 
 
 # Example usage with your Reibun generator
-def estimate_reibun_cost(word: str):
+def estimate_reibun_cost(prompt: str):
     estimator = TokenCostEstimator()
-
-    # Build the same prompt as your generator would use
-    prompt = f"""Generate a natural Japanese example sentence using the word "{word}".
-              Please format the response as JSON with the following fields:
-              - sentence: The Japanese example sentence
-              - reading: Reading in hiragana
-              - translation: English translation
-              - notes: Any relevant usage notes"""
-
-    # Estimate cost for a single generation
-    # Assuming average response length of 200 tokens
     return estimator.estimate_cost(prompt, expected_output_length=200)
 
 

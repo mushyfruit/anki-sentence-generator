@@ -8,7 +8,6 @@ from .constants import ConfigKeys
 
 
 class AnkiConfig:
-
     def __init__(self):
         self._load_env()
         self.restore_defaults()
@@ -62,7 +61,7 @@ class AnkiConfig:
         if not mw:
             return {}
 
-        defaults = mw.addonManager.addonConfigDefaults(__name__)
+        defaults = mw.addonManager.addonConfigDefaults("reibun_koubou")
         return defaults
 
     @property

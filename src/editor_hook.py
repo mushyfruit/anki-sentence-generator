@@ -6,10 +6,22 @@ from dataclasses import dataclass
 from .reibun import ReibunGenerator
 from .config import AnkiConfig
 from .utils import get_note_type, get_current_field_name, strip_html_tags
-from .constants import ConfigKeys
+from .constants import ConfigKeys, NoteConfig
 from .ui.field_dialog import FieldMappingDialog
 
-from aqt import QAction, QMenu, editor, QLabel, QWidgetAction, QComboBox, QWidget, QHBoxLayout
+from aqt import (
+    QAction,
+    QMenu,
+    editor,
+    QLabel,
+    QWidgetAction,
+    QComboBox,
+    QWidget,
+    QHBoxLayout,
+)
+
+from PyQt6.QtCore import Qt
+
 from aqt.utils import showWarning
 from anki.notes import Note
 
@@ -33,7 +45,8 @@ class ReibunEditorHook:
 
     def __init__(self):
         self.config = AnkiConfig()
-        self.generator = ReibunGenerator()
+        self.generator = ReibunGenerator(self.config)
+        self._current_note_type = None
 
     def on_editor_context_menu(
         self, editor_web_view: editor.EditorWebView, menu: QMenu
@@ -53,6 +66,8 @@ class ReibunEditorHook:
             if current_field_index is None:
                 return
 
+            self._current_note_type = get_note_type(editor_instance.note)
+
             # Add the reibun generation actions to context menu.
             generate_field_item = QAction("📝 Generate Smart Reibun", menu)
             configure_fields_item = QAction("📝 Configure Smart Fields", menu)
@@ -64,11 +79,25 @@ class ReibunEditorHook:
                 lambda: self.configure_field_mapping(editor_instance)
             )
 
+            note_type = get_note_type(editor_instance.note)
+            existing_config = self.config.get_note_type_config(note_type)
+
             context_options = getattr(self.config, ConfigKeys.CONTEXT_OPTIONS)
             difficulty_levels = getattr(self.config, ConfigKeys.DIFFICULTY_OPTIONS)
 
-            context_action = self._add_combobox("Context:", context_options, menu)
-            difficulty_action = self._add_combobox("Difficulty:", difficulty_levels, menu)
+            default_context = existing_config.get(NoteConfig.CONTEXT, "")
+            default_difficulty = existing_config.get(NoteConfig.DIFFICULTY, "")
+
+            context_action = self._add_combobox(
+                "Context:", context_options, default_context, NoteConfig.CONTEXT, menu
+            )
+            difficulty_action = self._add_combobox(
+                "Difficulty:",
+                difficulty_levels,
+                default_difficulty,
+                NoteConfig.DIFFICULTY,
+                menu,
+            )
 
             menu.addSeparator()
             menu.addAction(generate_field_item)
@@ -81,18 +110,37 @@ class ReibunEditorHook:
             log.exception("Failed to generate Smart Reibun menu: %s", e)
             showWarning(f"Failed to generate Smart Reibun menu: {str(e)}")
 
-    def _add_combobox(self, label: str, items: List[str], menu: QMenu) -> QAction:
+    def _add_combobox(
+        self, label: str, items: List[str], value: str, config_key: str, parent: QMenu
+    ) -> QAction:
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(20, 2, 8, 2)
         label = QLabel(label)
         combo = QComboBox()
         combo.addItems(items)
+
+        if value and value in items:
+            combo.setCurrentText(value)
+
         layout.addWidget(label)
         layout.addWidget(combo)
-        context_action = QWidgetAction(menu)
+        context_action = QWidgetAction(parent)
         context_action.setDefaultWidget(widget)
+
+        combo.setItemData(0, config_key, Qt.ItemDataRole.UserRole)
+        combo.currentTextChanged.connect(
+            lambda text, cb=combo: self._on_combo_changed(text, cb)
+        )
+
         return context_action
+
+    def _on_combo_changed(self, current_text: str, combo: QComboBox) -> None:
+        config_entry_key = combo.itemData(0, Qt.ItemDataRole.UserRole)
+        if self._current_note_type is not None:
+            existing_config = self.config.get_note_type_config(self._current_note_type)
+            existing_config[config_entry_key] = current_text
+            self.config.set_note_type_config(self._current_note_type, existing_config)
 
     def configure_field_mapping(
         self, editor: editor.Editor, target_field_name: Optional[str] = None
@@ -105,21 +153,18 @@ class ReibunEditorHook:
         :returns: True if configuration was successful, False otherwise.
         """
         note = editor.note
-        note_type = get_note_type(note)
-
-        # Retrieve any stored configs for the provided note type.
-        note_type_config = self.config.get_note_type_config(note_type)
 
         # Launch the Field Mapping Dialog to associate LLM outputs -> note fields.
-        print(note_type_config)
         dialog = FieldMappingDialog(
             note,
+            self.config,
             target_field_name=target_field_name,
-            existing_config=note_type_config,
             parent=editor.parentWindow,
         )
 
         if dialog.exec():
+            note_type = get_note_type(note)
+
             # Retrieve the field mappings as set by the user.
             updated_note_type_config = dialog.get_note_config()
 
@@ -139,9 +184,6 @@ class ReibunEditorHook:
         """
         context = self._prepare_reibun_context(editor)
         if context is None:
-            return
-
-        if not self._validate_field_values(context.target_field_value):
             return
 
         # Try to get existing config or configure a new one.
@@ -164,13 +206,18 @@ class ReibunEditorHook:
             log.debug("No field name found")
             return
 
+        note_type = get_note_type(note)
+        existing_config = self.config.get_note_type_config(note_type)
+        difficulty = existing_config.get(NoteConfig.DIFFICULTY, None)
+        context_type = existing_config.get(NoteConfig.CONTEXT, None)
+
         return ReibunContext(
             note=note,
             note_type=get_note_type(note),
             target_field_name=target_field_name,
             target_field_value=strip_html_tags(note[target_field_name]),
-            difficulty=None,
-            context_type=None,
+            difficulty=difficulty,
+            context_type=context_type,
         )
 
     def _get_or_create_field_mappings(
@@ -202,14 +249,12 @@ class ReibunEditorHook:
         :param editor: Editor instance.
         :param field_mappings: Mapping of generated field names to note fields.
         """
-        generation_context = self._get_generation_context(
-            context.note, context.target_field_name
-        )
         self.generator.update_note_field(
             context.note,
             context.target_field_value,
             field_mappings,
-            context=generation_context,
+            difficulty=context.difficulty,
+            generation_context=context.context_type,
             on_success_callback=lambda x: self.post_field_update(x, editor),
         )
 
@@ -222,10 +267,3 @@ class ReibunEditorHook:
         if note.id:
             note.load()
         editor.loadNote()
-
-    def _get_generation_context(self, note, exclude_field: str) -> dict:
-        return {
-            name: value
-            for name, value in note.items()
-            if value and name != exclude_field
-        }

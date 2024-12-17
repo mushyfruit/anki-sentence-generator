@@ -1,0 +1,36 @@
+templates:
+  required:
+    format: |
+      
+      {% if difficulty %}
+      Difficulty Requirements:
+      {{difficulty | indent(2)}}
+      {% endif %}
+
+      {% if context_type %}
+      Context Requirements:
+      {{context_type | indent(2)}}
+      {% endif %}
+      
+      Important: Put <b>{{word}}</b> tags around the target word in both the sentence and reading.
+      Format your response as JSON with these fields:
+      {
+        "sentence": "Japanese example sentence with <b>target word</b>",
+        "reading": "Reading in hiragana with <b>target word reading</b>",
+        "translation": "English translation",
+        "notes": "Usage notes and explanations"
+      }
+
+  customizable:
+    default: |
+      Generate a natural Japanese example sentence.
+
+      Word Information:
+      - Target Word: {{word}}
+      
+      The sentence should:
+      - Reflect real spoken/written Japanese, and be an ideal example sentence to learn from.
+      - Not too long, ensure it's ideal for learning via spaced-repetition.
+      - Appropriate for the word's level.
+      - Clear in demonstrating the word's meaning and nuance.
+      - Grammatically correct.
