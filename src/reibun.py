@@ -51,16 +51,39 @@ class ReibunGenerator(object):
                 log.error("Failed when attempting to generate reibun.")
                 return False
 
-            for response_field, target_field in field_mappings.get(
-                NoteConfig.FIELDS, {}
-            ).items():
-                note[target_field] = response[response_field]
+            self._update_note_fields(note, response, field_mappings)
 
         except Exception as e:
             log.error(f"Failed to update note: {e}")
             raise ReibunGenerationError(f"Failed to update note: {e}") from e
 
         return True
+
+    def _update_note_fields(self, note, response, note_field_mappings):
+        # Retrieve the per-note type field mappings.
+        # Defines how the JSON response gets mapped to the note's fields.
+        # Only valid mappings are present in the note-type field dictionary.
+        target_mappings = note_field_mappings.get(NoteConfig.FIELDS, {})
+        if not target_mappings:
+            raise ReibunGenerationError(
+                "No target mappings defined for the current note type!"
+            )
+
+        for response_field, target_field in sorted(
+            target_mappings.items(), key=lambda x: x[1]
+        ):
+            # Check if this is an append operation
+            if "[Append]" in target_field:
+                base_field = target_field.replace(" [Append]", "")
+                existing_content = note[base_field]
+                # Add new content with separator
+                note[base_field] = (
+                    f"{existing_content}<br><br>{response[response_field]}"
+                    if existing_content
+                    else response[response_field]
+                )
+            else:
+                note[target_field] = response[response_field]
 
     def _generate_reibun(self, target_phrase, difficulty=None, context=None):
         full_prompt = self._prompt_manager.build_reibun_prompt(
@@ -100,7 +123,7 @@ class ReibunGenerator(object):
             raise ParsingError("Failed to parse LLM response") from e
 
     def _validate_response(self, response):
-        missing = ResponseFields.required_fields - set(response.keys())
+        missing = set(ResponseFields.required_fields) - set(response.keys())
         if missing:
             raise ParsingError(f"Missing required fields: {missing}")
 

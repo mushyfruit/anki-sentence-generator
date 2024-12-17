@@ -1,3 +1,5 @@
+import logging
+
 from aqt.qt import (
     QDialog,
     QVBoxLayout,
@@ -13,8 +15,10 @@ from aqt.qt import (
 from anki.notes import Note
 
 from ..config import AnkiConfig
-from ..constants import NoteConfig
+from ..constants import NoteConfig, ResponseFields
 from ..utils import get_field_names_from_note, get_note_type
+
+log = logging.getLogger(__name__)
 
 
 class FieldMappingDialog(QDialog):
@@ -44,7 +48,7 @@ class FieldMappingDialog(QDialog):
         layout = QVBoxLayout()
         grid = QGridLayout()
 
-        required_fields = ["Sentence", "Reading", "Translation", "Notes"]
+        required_fields = [x.title() for x in ResponseFields.required_fields]
         for i, field_type in enumerate(required_fields):
             label = QLabel(f"{field_type} Field:")
             combo = QComboBox()
@@ -130,7 +134,13 @@ class FieldMappingDialog(QDialog):
             combo_box.setCurrentIndex(index)
 
     def on_selection_changed(self, current_field: str, selected_value: str):
+        current_field = current_field.lower()
         if selected_value == "None":
+            return
+
+        # Multiple fields are allowed.
+        if current_field in ResponseFields.multi_fields:
+            self._handle_multi_field_selections(current_field, selected_value)
             return
 
         for field_type, combo in self._combos.items():
@@ -139,6 +149,37 @@ class FieldMappingDialog(QDialog):
                 and combo.currentText() == selected_value
             ):
                 combo.setCurrentText("None")
+
+    def _handle_multi_field_selections(self, current_field, selected_value):
+        current_combo = self._combos[current_field]
+        selected_values = [
+            combo.currentText()
+            for combo in self._combos.values()
+            if combo is not current_combo
+        ]
+
+        # The target field has already been selected. Append to that field instead.
+        current_combo = self._combos[current_field]
+        if selected_value in selected_values:
+            append_value = f"{selected_value} [Append]"
+
+            # Check if the [Append] item exists
+            append_index = current_combo.findText(append_value)
+
+            # If it doesn't exist, add it
+            if append_index == -1:
+                current_combo.addItem(append_value)
+
+            # Temporarily block signals to prevent recursive calls
+            current_combo.blockSignals(True)
+            current_combo.setCurrentText(append_value)
+            current_combo.blockSignals(False)
+        else:
+            current_combo = self._combos[current_field]
+            for i in range(current_combo.count() - 1, -1, -1):
+                item_text = current_combo.itemText(i)
+                if item_text.endswith("[Append]"):
+                    current_combo.removeItem(i)
 
     def save_mapping(self):
         for field_type, combo in self._combos.items():

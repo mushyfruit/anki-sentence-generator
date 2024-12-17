@@ -16,21 +16,30 @@ templates:
       Format your response as JSON with these fields:
       {
         "sentence": "Japanese example sentence with <b>target word</b>",
-        "reading": "Reading in hiragana with <b>target word reading</b>",
+        "reading": "Sentence with furigana readings marked like: 人[ひと] for each kanji. Include <b>tags</b> around target word.",
         "translation": "English translation",
-        "notes": "Notes on nuance/tone of the word, differentiate it from other similar words, use-cases, etc. Should not include notes about the prompt!"
+        "notes": "• Key usage point or common context (5-10 words)<br>• Crucial nuance or difference from similar words (5-10 words)"
       }
+      
+      IMPORTANT: For ONLY the reading field, mark EVERY kanji with its furigana in square brackets like this:
+      Example: 私[わたし]は本[ほん]を読[よ]みます
+
 
   customizable:
     default: |
       Generate a natural Japanese example sentence.
 
-      Word Information:
-      - Target Word: {{word}}
+      Target Word (対象単語): {{word}}
+      
+      文の要件 (Sentence Requirements):
+      - 自然な日常会話でよく使われる表現であること
+      - 文脈から単語の意味が明確に分かること
+      - 一般的な使用方法を示すこと
       
       The sentence should:
-      - Reflect real spoken/written Japanese, and be an ideal example sentence to learn from.
+      - Reflect real spoken/written Japanese.
       - Not too long, ensure it's ideal for learning via spaced-repetition.
-      - Appropriate for the word's level.
-      - Clear in demonstrating the word's meaning and nuance.
+      - Avoid archaic or rare patterns, overly formal/stiff expressions, and textbook-style artificial examples.
+      - Show typical usage context.
       - Grammatically correct.
+      - Ensure translation is natural, idiomatic English. Preserve nuance over literal meaning.

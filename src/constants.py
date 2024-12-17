@@ -24,4 +24,5 @@ class ResponseFields:
     TRANSLATION = "translation"
     NOTES = "notes"
 
-    required_fields = {SENTENCE, READING, TRANSLATION, NOTES}
+    required_fields = [SENTENCE, READING, TRANSLATION, NOTES]
+    multi_fields = {NOTES}

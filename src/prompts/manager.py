@@ -71,7 +71,7 @@ class PromptManager:
 
         yaml_pattern = os.path.join(self.template_dir, "*.yaml")
         for yaml_file in glob.glob(yaml_pattern):
-            with open(yaml_file) as f:
+            with open(yaml_file, "r", encoding="utf-8") as f:
                 yaml_name = os.path.splitext(os.path.basename(yaml_file))[0]
                 templates[yaml_name] = yaml.safe_load(f)
         return templates

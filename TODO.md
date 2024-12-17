@@ -22,3 +22,4 @@
   - Refine the existing structure.
 
 - [x] Use QueryOp for sentence generation
+- [x] Append notes to field, rather than exclusive.
