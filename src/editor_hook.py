@@ -245,7 +245,6 @@ class ReibunEditorHook:
         return self.config.get_note_type_config(note_type)
 
     def _validate_field_values(self, value: str) -> bool:
-        # TODO further validation?
         if not value and not self.config.debug_mode:
             showWarning("Please enter the word to generate a reibun from!")
             return False
